@@ -2,203 +2,217 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>YPF Full - Punto de Consulta v8</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>YPF Full - Terminal Inteligente</title>
     <script src="https://cdn.jsdelivr.net/npm/quaggajs@0.12.1/dist/quagga.min.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
-        .view { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: none; z-index: 1; }
-        .active-view { display: block !important; }
+        :root { --ypf-azul: #005596; --ypf-amarillo: #ffcc00; --ypf-verde: #00a859; }
+        
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', Roboto, sans-serif; }
+        
+        /* Vistas con transiciones suaves */
+        .view { 
+            position: absolute; width: 100%; height: 100%; 
+            display: none; opacity: 0; transition: opacity 0.4s ease; 
+        }
+        .active-view { display: block; opacity: 1; z-index: 10; }
 
-        /* --- VISTA PROMOS --- */
-        #slideshow { width: 100%; height: 100%; position: relative; background: #000; }
-        .slide { position: absolute; width: 100%; height: 100%; opacity: 0; transition: opacity 1s; object-fit: contain; }
+        /* --- PROMOS --- */
+        #slideshow { width: 100%; height: 100%; background: #000; }
+        .slide { position: absolute; width: 100%; height: 100%; opacity: 0; transition: opacity 1s ease-in-out; object-fit: contain; }
         .active-slide { opacity: 1; }
 
-        /* --- VISTA PRECIOS --- */
-        #view-precios { background: #fff; z-index: 100; }
-        #header-precios { height: 80px; background: #005596; display: flex; align-items: center; padding: 0 15px; gap: 10px; }
-        #input-busqueda { flex-grow: 1; font-size: 1.5rem; padding: 12px; border-radius: 8px; border: none; }
-        #tabla-container { height: calc(100% - 160px); overflow-y: auto; background: #fff; }
-        table { width: 100%; border-collapse: collapse; }
-        td { padding: 15px; border-bottom: 1px solid #eee; color: #333; font-size: 1.3rem; }
-        .precio-tag { font-weight: bold; color: #005596; font-size: 1.6rem; text-align: right; }
+        /* --- PRECIOS --- */
+        #view-precios { background: #f4f7f9; z-index: 100; }
+        .header { height: 90px; background: var(--ypf-azul); display: flex; align-items: center; padding: 0 20px; gap: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        #input-busqueda { flex-grow: 1; font-size: 1.8rem; padding: 15px; border-radius: 12px; border: none; outline: none; }
+        
+        .tabla-scroll { height: calc(100% - 180px); overflow-y: auto; padding: 15px; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0 10px; }
+        td { background: white; padding: 20px; color: #333; font-size: 1.4rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        td:first-child { border-radius: 12px 0 0 12px; width: 70%; }
+        td:last-child { border-radius: 0 12px 12px 0; text-align: right; color: var(--ypf-azul); font-weight: bold; font-size: 1.8rem; }
 
-        /* --- VISTA CÁMARA --- */
+        /* --- CÁMARA --- */
         #view-camara { background: #000; z-index: 200; }
-        #interactive.viewport { width: 100%; height: 100%; position: relative; }
-        #interactive video, #interactive canvas { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0; }
-        .scan-overlay { 
+        #interactive video { width: 100%; height: 100%; object-fit: cover; }
+        .scan-mask { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 80%; height: 30%; border: 4px dashed #ffcc00; border-radius: 15px; z-index: 210;
-            box-shadow: 0 0 0 2000px rgba(0,0,0,0.5); pointer-events: none;
+            width: 80%; height: 30%; border: 4px solid var(--ypf-amarillo); border-radius: 20px;
+            box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); z-index: 210; pointer-events: none;
         }
 
-        /* Botones */
-        .btn { padding: 15px 25px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; border: none; cursor: pointer; z-index: 50; }
-        .btn-float { position: absolute; right: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-        .btn-precios { top: 20px; background: #ffcc00; color: #000; }
-        .btn-scan { top: 100px; background: #00a859; color: #fff; }
-        .btn-volver { width: 100%; height: 80px; background: #cc0000; color: #fff; font-size: 1.5rem; border-radius: 0; }
+        /* Botones Estilo YPF */
+        .btn-action { 
+            position: absolute; right: 30px; padding: 20px 35px; font-size: 1.4rem; font-weight: bold;
+            border-radius: 50px; border: none; cursor: pointer; z-index: 50; transition: transform 0.2s;
+        }
+        .btn-action:active { transform: scale(0.95); }
+        .btn-precios { top: 30px; background: var(--ypf-amarillo); color: #000; }
+        .btn-scan-home { top: 130px; background: var(--ypf-verde); color: #fff; }
+        .btn-volver { bottom: 0; left: 0; width: 100%; height: 90px; background: #cc0000; color: #fff; font-size: 1.6rem; border-radius: 0; position: absolute; }
         
-        #info-bar { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; justify-content: space-between; padding: 10px 20px; box-sizing: border-box; z-index: 10; border-top: 2px solid #005596; }
+        #info-bar { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; justify-content: space-between; padding: 15px 30px; box-sizing: border-box; z-index: 10; border-top: 3px solid var(--ypf-azul); font-size: 1.2rem; }
     </style>
 </head>
 <body>
 
-    <div id="view-promos" class="view active-view">
-        <button class="btn btn-float btn-precios" onclick="openPrecios()">LISTA DE PRECIOS</button>
-        <button class="btn btn-float btn-scan" onclick="openCamara()">📷 ESCANEAR</button>
+    <section id="view-promos" class="view active-view">
+        <button class="btn-action btn-precios" onclick="changeView('view-precios')">LISTA DE PRECIOS</button>
+        <button class="btn-action btn-scan-home" onclick="changeView('view-camara')">ESCANEAR PRODUCTO</button>
         <div id="slideshow"></div>
         <div id="info-bar">
-            <div id="label-data">Cargando...</div>
+            <div id="label-area">Sincronizando...</div>
             <div id="clock">00:00</div>
         </div>
-    </div>
+    </section>
 
-    <div id="view-precios" class="view">
-        <div id="header-precios">
-            <input type="text" id="input-busqueda" placeholder="Buscar..." onkeyup="filtrarPrecios()">
-            <button class="btn" style="background:#00a859; color:white" onclick="openCamara()">📷</button>
+    <section id="view-precios" class="view">
+        <div class="header">
+            <input type="text" id="input-busqueda" placeholder="Escribe el nombre o escanea..." onkeyup="filterPrices()">
+            <button class="btn-action" style="position:static; background:var(--ypf-verde); color:white" onclick="changeView('view-camara')">📷</button>
         </div>
-        <div id="tabla-container">
-            <table><tbody id="body-precios"></tbody></table>
+        <div class="tabla-scroll">
+            <table><tbody id="lista-body"></tbody></table>
         </div>
-        <button class="btn btn-volver" onclick="resetApp()">VOLVER A PROMOS</button>
-    </div>
+        <button class="btn-volver" onclick="changeView('view-promos')">VOLVER A PUBLICIDAD</button>
+    </section>
 
-    <div id="view-camara" class="view">
-        <div class="scan-overlay"></div>
-        <div id="interactive"></div>
-        <button class="btn btn-volver" style="position:absolute; bottom:0;" onclick="resetApp()">CANCELAR</button>
-    </div>
+    <section id="view-camara" class="view">
+        <div class="scan-mask"></div>
+        <div id="interactive" class="viewport"></div>
+        <button class="btn-volver" onclick="changeView('view-promos')">CANCELAR ESCANEO</button>
+    </section>
 
     <script>
-        var area = new URLSearchParams(window.location.search).get('area') || 'full';
-        var listaPrecios = [];
-        var imagesFound = [];
-        var currentSlide = 1;
+        const state = {
+            area: new URLSearchParams(window.location.search).get('area') || 'full',
+            prices: [],
+            images: [],
+            currentSlide: 0
+        };
 
-        // --- 1. SLIDESHOW Y AUTO-DETECCION ---
-        function scanImages(index) {
-            if (index > 25) { startSlideshow(); return; }
-            var isLandscape = window.innerWidth > window.innerHeight;
-            var suffix = isLandscape ? "_h" : "_v";
-            var prefix = (area === 'gaming') ? 'gc' : area;
-            var src = "media/" + area + "/" + prefix + (index < 10 ? "0" + index : index) + suffix + ".jpg";
+        // --- 1. GESTIÓN DE VISTAS (Navegación arreglada) ---
+        function changeView(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view'));
+            document.getElementById(viewId).classList.add('active-view');
             
-            var img = new Image();
-            img.onload = function() { imagesFound.push(src); scanImages(index + 1); };
-            img.onerror = function() { startSlideshow(); };
-            img.src = src;
-        }
+            // Lógica específica al entrar
+            if (viewId === 'view-camara') initScanner();
+            else Quagga.stop();
 
-        function startSlideshow() {
-            var container = document.getElementById('slideshow');
-            if (imagesFound.length === 0) { document.getElementById('label-data').innerText = "Sin fotos"; return; }
-            
-            for (var i = 0; i < imagesFound.length; i++) {
-                var el = document.createElement('img');
-                el.src = imagesFound[i];
-                el.className = 'slide' + (i === 0 ? ' active-slide' : '');
-                el.id = 'slide-' + (i + 1);
-                container.appendChild(el);
-            }
-            document.getElementById('label-data').innerText = area.toUpperCase() + " | A:" + imagesFound.length;
-
-            if (imagesFound.length > 1) {
-                setInterval(function() {
-                    document.getElementById('slide-' + currentSlide).classList.remove('active-slide');
-                    currentSlide = (currentSlide % imagesFound.length) + 1;
-                    document.getElementById('slide-' + currentSlide).classList.add('active-slide');
-                }, 8000);
+            if (viewId === 'view-precios') {
+                document.getElementById('input-busqueda').value = '';
+                renderPrices(state.prices);
+                setTimeout(() => document.getElementById('input-busqueda').focus(), 500);
             }
         }
 
-        // --- 2. GESTIÓN DE VISTAS Y BOTONES ---
-        function resetApp() {
-            try { Quagga.stop(); } catch(e) {}
-            document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active-view'); });
-            document.getElementById('view-promos').classList.add('active-view');
-        }
-
-        function openPrecios() {
-            document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active-view'); });
-            document.getElementById('view-precios').classList.add('active-view');
-            renderTabla(listaPrecios);
-        }
-
-        // --- 3. CÁMARA (Arreglado para KitKat) ---
-        function openCamara() {
-            document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active-view'); });
-            document.getElementById('view-camara').classList.add('active-view');
-
+        // --- 2. CÁMARA (Optimizado para Android 13) ---
+        function initScanner() {
             Quagga.init({
                 inputStream: {
                     name: "Live",
                     type: "LiveStream",
                     target: document.querySelector('#interactive'),
-                    constraints: { facingMode: "user" } // Usa la frontal
+                    constraints: { 
+                        facingMode: "user", // Cambiar a "environment" si prefieres la cámara trasera
+                        aspectRatio: { min: 1, max: 2 } 
+                    }
                 },
                 decoder: { readers: ["ean_reader", "ean_8_reader", "code_128_reader"] }
-            }, function(err) {
-                if (err) { 
-                    alert("Error cámara: " + err.name); 
-                    resetApp(); 
-                    return; 
-                }
+            }, (err) => {
+                if (err) { console.error(err); alert("Error al iniciar cámara"); changeView('view-promos'); return; }
                 Quagga.start();
             });
 
-            Quagga.onDetected(function(data) {
-                var code = data.codeResult.code;
+            Quagga.onDetected((data) => {
+                const code = data.codeResult.code;
                 Quagga.stop();
-                openPrecios();
+                changeView('view-precios');
                 document.getElementById('input-busqueda').value = code;
-                filtrarPrecios();
+                filterPrices();
             });
         }
 
-        // --- 4. PRECIOS Y BUSCADOR ---
-        function filtrarPrecios() {
-            var term = document.getElementById('input-busqueda').value.toLowerCase();
-            var filtrados = listaPrecios.filter(function(item) {
-                return item.n.toLowerCase().indexOf(term) > -1 || item.b.indexOf(term) > -1;
-            });
-            renderTabla(filtrados);
+        // --- 3. PRECIOS Y BUSCADOR ---
+        function filterPrices() {
+            const term = document.getElementById('input-busqueda').value.toLowerCase();
+            const filtered = state.prices.filter(p => 
+                p.n.toLowerCase().includes(term) || (p.b && p.b.includes(term))
+            );
+            renderPrices(filtered);
         }
 
-        function renderTabla(datos) {
-            var html = "";
-            for (var i = 0; i < datos.length; i++) {
-                html += "<tr><td>"+datos[i].n+"<br><small>"+datos[i].b+"</small></td><td class='precio-tag'>"+datos[i].p+"</td></tr>";
+        function renderPrices(data) {
+            const body = document.getElementById('lista-body');
+            body.innerHTML = data.map(p => `
+                <tr>
+                    <td>${p.n}<br><small style="color:#888">${p.b || ''}</small></td>
+                    <td>${p.p}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="2">No se encontró el producto</td></tr>';
+        }
+
+        // --- 4. SLIDESHOW (Auto-detect funcional) ---
+        async function loadSlides() {
+            const isLandscape = window.innerWidth > window.innerHeight;
+            const suffix = isLandscape ? "_h" : "_v";
+            const prefix = (state.area === 'gaming') ? 'gc' : state.area;
+            
+            for (let i = 1; i <= 20; i++) {
+                const num = i.toString().padStart(2, '0');
+                const src = `media/${state.area}/${prefix}${num}${suffix}.jpg`;
+                try {
+                    const res = await fetch(src, { method: 'HEAD' });
+                    if (res.ok) state.images.push(src);
+                    else break;
+                } catch { break; }
             }
-            document.getElementById('body-precios').innerHTML = html || "<tr><td>Sin resultados</td></tr>";
+            startSlideshow();
+        }
+
+        function startSlideshow() {
+            const container = document.getElementById('slideshow');
+            if (state.images.length === 0) {
+                document.getElementById('label-area').innerText = "Sin medios";
+                return;
+            }
+            
+            state.images.forEach((src, i) => {
+                const img = document.createElement('img');
+                img.src = src;
+                img.className = `slide ${i === 0 ? 'active-slide' : ''}`;
+                img.id = `s-${i}`;
+                container.appendChild(img);
+            });
+
+            document.getElementById('label-area').innerText = `${state.area.toUpperCase()} | A:${state.images.length}`;
+
+            setInterval(() => {
+                if (state.images.length < 2) return;
+                document.getElementById(`s-${state.currentSlide}`).classList.remove('active-slide');
+                state.currentSlide = (state.currentSlide + 1) % state.images.length;
+                document.getElementById(`s-${state.currentSlide}`).classList.add('active-slide');
+            }, 8000);
         }
 
         // --- INICIO ---
-        function init() {
-            // Cargar Precios
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', 'precios.json?v=' + Math.random(), true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    listaPrecios = JSON.parse(xhr.responseText);
-                }
-            };
-            xhr.send();
-
+        window.onload = async () => {
             // Reloj
-            setInterval(function() {
-                var now = new Date();
-                var h = (now.getHours() < 10 ? "0" : "") + now.getHours();
-                var m = (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
-                document.getElementById('clock').innerText = h + ":" + m;
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('clock').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             }, 1000);
 
-            scanImages(1);
-        }
+            // Cargar Precios
+            try {
+                const res = await fetch('precios.json?v=' + Math.random());
+                state.prices = await res.json();
+            } catch (e) { console.error("Error cargando precios"); }
 
-        window.onload = init;
+            loadSlides();
+        };
     </script>
 </body>
 </html>
