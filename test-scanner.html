@@ -3,33 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Scanner</title>
+    <title>Test Scanner v2</title>
     <style>
         body { margin: 0; background: #111; color: #fff; font-family: sans-serif; padding: 20px; box-sizing: border-box; }
-        video { width: 100%; max-height: 40vh; object-fit: cover; background: #000; display: block; }
+        video { width: 100%; max-height: 40vh; object-fit: cover; background: #000; display: block; transform: scaleX(-1); }
         #log { background: #000; border: 1px solid #333; padding: 10px; font-size: 13px; font-family: monospace; height: 200px; overflow-y: auto; margin-top: 10px; }
         button { padding: 15px 20px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin: 8px 4px; }
         .ok { background: #00a859; color: #fff; }
-        .warn { background: #ffcc00; color: #000; }
         .err { background: #cc0000; color: #fff; }
         #resultado { font-size: 2rem; font-weight: bold; color: #ffcc00; padding: 15px 0; min-height: 60px; }
     </style>
 </head>
 <body>
-    <h2 style="margin:0 0 10px">Test Scanner - Diagnóstico</h2>
+    <h2 style="margin:0 0 10px">Test Scanner v2</h2>
     <video id="v" autoplay playsinline muted></video>
     <div id="resultado">—</div>
-    <div>
-        <button class="ok" onclick="testCam()">1. Probar cámara</button>
-        <button class="warn" onclick="testZXing()">2. Verificar ZXing</button>
-        <button class="ok" onclick="testScan()">3. Iniciar escaneo</button>
-        <button class="err" onclick="stopAll()">Detener todo</button>
-    </div>
+    <button class="ok" onclick="iniciar()">Iniciar escaneo</button>
+    <button class="err" onclick="detener()">Detener</button>
     <div id="log"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
     <script>
-        let stream = null;
         let reader = null;
 
         function log(msg, tipo) {
@@ -39,43 +33,10 @@
             el.scrollTop = el.scrollHeight;
         }
 
-        function testCam() {
-            log('Solicitando acceso a cámara...', 'info');
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
-                .then(s => {
-                    stream = s;
-                    const v = document.getElementById('v');
-                    v.srcObject = s;
-                    const tracks = s.getVideoTracks();
-                    log('✓ Cámara OK. Track: ' + (tracks[0] ? tracks[0].label : 'sin label'), 'ok');
-                    const settings = tracks[0] ? tracks[0].getSettings() : {};
-                    log('Resolución: ' + (settings.width || '?') + 'x' + (settings.height || '?'), 'ok');
-                })
-                .catch(e => log('✗ Error cámara: ' + e.name + ' - ' + e.message, 'err'));
-        }
-
-        function testZXing() {
-            if (typeof ZXing === 'undefined') {
-                log('✗ ZXing NO cargó. Problema de red o CDN bloqueado.', 'err');
-                return;
-            }
-            log('✓ ZXing cargado. Versión del objeto: ' + Object.keys(ZXing).length + ' exports', 'ok');
-            log('Formatos disponibles: EAN_8=' + ZXing.BarcodeFormat.EAN_8 + ' EAN_13=' + ZXing.BarcodeFormat.EAN_13, 'ok');
+        function iniciar() {
+            log('Iniciando con decodeFromConstraints...', 'info');
             try {
                 reader = new ZXing.BrowserMultiFormatReader();
-                log('✓ BrowserMultiFormatReader instanciado OK', 'ok');
-            } catch(e) {
-                log('✗ Error instanciando reader: ' + e.message, 'err');
-            }
-        }
-
-        function testScan() {
-            if (!stream) { log('Primero probá la cámara (botón 1)', 'warn'); return; }
-            if (typeof ZXing === 'undefined') { log('ZXing no disponible (botón 2)', 'warn'); return; }
-
-            log('Iniciando escaneo con ZXing...', 'info');
-            try {
-                if (!reader) reader = new ZXing.BrowserMultiFormatReader();
 
                 const hints = new Map();
                 hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
@@ -86,35 +47,38 @@
                 hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
                 reader.hints = hints;
 
-                const video = document.getElementById('v');
-                log('Llamando decodeFromVideoElement...', 'info');
+                const constraints = {
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
 
-                reader.decodeFromVideoElement(video, (result, err) => {
+                // ZXing maneja el stream internamente - más confiable
+                reader.decodeFromConstraints(constraints, document.getElementById('v'), (result, err) => {
                     if (result) {
                         const codigo = result.getText();
                         const fmt = result.getBarcodeFormat();
-                        log('✓ LEIDO: ' + codigo + ' (formato: ' + fmt + ')', 'ok');
+                        log('✓ LEIDO: ' + codigo + ' formato=' + fmt, 'ok');
                         document.getElementById('resultado').innerText = '✓ ' + codigo;
                     } else if (err && !(err instanceof ZXing.NotFoundException)) {
-                        log('Error decode: ' + err.name + ' - ' + err.message, 'err');
+                        log('Error: ' + err.name + ' ' + err.message, 'err');
                     }
                 });
 
-                log('decodeFromVideoElement activo, acercá un código de barras', 'ok');
+                log('Scanner activo, acercá un código', 'ok');
             } catch(e) {
-                log('✗ Excepción al iniciar scan: ' + e.name + ' - ' + e.message, 'err');
+                log('Excepción: ' + e.name + ' - ' + e.message, 'err');
             }
         }
 
-        function stopAll() {
+        function detener() {
             if (reader) { try { reader.reset(); } catch(e){} reader = null; }
-            if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-            document.getElementById('v').srcObject = null;
-            log('Todo detenido.', 'warn');
+            log('Detenido.', 'warn');
         }
 
-        log('Página cargada. Presioná los botones en orden.', 'info');
-        log('ZXing al cargar: ' + (typeof ZXing !== 'undefined' ? '✓ OK' : '✗ NO cargó'), typeof ZXing !== 'undefined' ? 'ok' : 'err');
+        log('Listo. Presioná Iniciar escaneo.', 'info');
     </script>
 </body>
 </html>
