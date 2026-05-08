@@ -173,6 +173,7 @@
                 // Solo EAN-13 y Code128, sin EAN-8
                 const hints = new Map();
                 hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+                    ZXing.BarcodeFormat.EAN_8,
                     ZXing.BarcodeFormat.EAN_13,
                     ZXing.BarcodeFormat.CODE_128
                 ]);
@@ -183,7 +184,12 @@
                     if (!scannerActivo) return;
                     if (result) {
                         const codigo = result.getText();
-                        if (!codigo || codigo.length < 8) return;
+                        const fmt = result.getBarcodeFormat();
+                        // Validar longitud exacta según formato para evitar lecturas falsas
+                        const esEAN8  = fmt === ZXing.BarcodeFormat.EAN_8  && codigo.length === 8;
+                        const esEAN13 = fmt === ZXing.BarcodeFormat.EAN_13 && codigo.length === 13;
+                        const es128   = fmt === ZXing.BarcodeFormat.CODE_128 && codigo.length >= 6;
+                        if (!esEAN8 && !esEAN13 && !es128) return;
                         scannerActivo = false;
                         stopCam();
                         nav('view-precios');
