@@ -2,167 +2,108 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Siera Cloud Signage - Control Centralizado</title>
+    <title>Siera Cloud Signage - Auto-Detect</title>
     <style>
-        /* Reset de estilos para pantalla completa */
-        body, html { 
-            margin: 0; 
-            padding: 0; 
-            width: 100%; 
-            height: 100%; 
-            overflow: hidden; 
-            background-color: #000; 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        /* Contenedor de las imágenes */
-        #slideshow {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-
-        /* Estilo de las imágenes con transición suave */
-        .slide {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0;
-            transition: opacity 1.5s ease-in-out;
-            object-fit: cover; /* Ajusta la imagen sin deformar */
-        }
-
-        .active {
-            opacity: 1;
-        }
-
-        /* Barra inferior de información */
-        #info-bar {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 30px;
-            box-sizing: border-box;
-            z-index: 100;
-            border-top: 2px solid #005596; /* Color azul YPF */
-        }
-
-        #label-area {
-            font-size: 1.2rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        #clock {
-            font-size: 2rem;
-            font-weight: 300;
-        }
-
-        /* Indicador de carga */
-        #loader {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 1.2rem;
-        }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        #slideshow { position: relative; width: 100vw; height: 100vh; }
+        .slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 1.2s; object-fit: cover; }
+        .active { opacity: 1; }
+        #info-bar { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.7); color: white; display: flex; justify-content: space-between; padding: 15px; box-sizing: border-box; z-index: 100; border-top: 2px solid #005596; }
+        #clock { font-size: 2rem; }
+        #loader { position: absolute; top: 50%; left: 50%; color: white; transform: translate(-50%, -50%); z-index: 200; }
     </style>
 </head>
 <body>
-
-    <div id="loader">Cargando contenidos...</div>
+    <div id="loader">Sincronizando contenidos...</div>
     <div id="slideshow"></div>
-
     <div id="info-bar">
-        <span id="label-area">Identificando Sector...</span>
+        <span id="label-area">Iniciando...</span>
         <span id="clock">00:00</span>
     </div>
 
     <script>
-        /**
-         * CONFIGURACIÓN DE ARCHIVOS
-         * total: cantidad de archivos en la carpeta
-         * prefix: el inicio del nombre del archivo según pediste
-         */
-        const config = {
-            'full':   { prefix: 'full',   total: 3 }, // Ej: full01.jpg, full02.jpg...
-            'playa':  { prefix: 'playa',  total: 2 }, // Ej: playa01.jpg, playa02.jpg...
-            'gaming': { prefix: 'gc',     total: 4 }  // Ej: gc01.jpg, gc02.jpg...
-        };
+        // 1. Identificar el área
+        var area = "full";
+        var query = window.location.search.substring(1);
+        var vars = query.split("&");
+        for (var i=0; i<vars.length; i++) {
+            var pair = vars[i].split("=");
+            if(pair[0] == "area"){ area = pair[1]; }
+        }
 
-        // 1. Obtener parámetros de la URL
-        const params = new URLSearchParams(window.location.search);
-        const area = params.get('area') || 'full'; // Por defecto carga 'full'
-        
-        // 2. Validar si el área existe en la config
-        const setup = config[area] || config['full'];
-        const container = document.getElementById('slideshow');
-        const label = document.getElementById('label-area');
-        
-        label.innerText = area === 'gaming' ? "Gaming City - Info" : "YPF - Sector " + area;
+        var prefixes = { 'full': 'full', 'playa': 'playa', 'gaming': 'gc' };
+        var prefix = prefixes[area] || 'full';
+        var imagesFound = [];
+        var maxPossible = 20; // Máximo de fotos que intentará buscar
+        var loadedCount = 0;
 
-        // 3. Crear las imágenes en el DOM
-        for (let i = 1; i <= setup.total; i++) {
-            const num = String(i).padStart(2, '0'); // Convierte 1 en "01"
-            const img = document.createElement('img');
-            
-            // Ruta: media/area/prefijo01.jpg
-            img.src = `media/${area}/${setup.prefix}${num}.jpg`;
-            img.className = 'slide' + (i === 1 ? ' active' : '');
-            img.id = 'slide-' + i;
+        document.getElementById('label-area').innerText = "Sector: " + area.toUpperCase();
 
-            // Quitar el loader cuando cargue la primera imagen
-            if (i === 1) {
-                img.onload = () => document.getElementById('loader').style.display = 'none';
+        // 2. Función para buscar imágenes una por una
+        function scanImages(index) {
+            if (index > maxPossible) {
+                startSlideshow();
+                return;
             }
 
-            container.appendChild(img);
+            var num = (index < 10) ? "0" + index : index;
+            var testImg = new Image();
+            var src = "media/" + area + "/" + prefix + num + ".jpg";
+
+            testImg.onload = function() {
+                imagesFound.push(src);
+                scanImages(index + 1); // Encontrada, buscar la siguiente
+            };
+
+            testImg.onerror = function() {
+                // No hay más imágenes correlativas, empezar carrusel
+                startSlideshow();
+            };
+
+            testImg.src = src;
         }
 
-        // 4. Lógica de rotación de diapositivas
-        let current = 1;
-        function rotate() {
-            if (setup.total <= 1) return;
+        // 3. Iniciar el carrusel con lo encontrado
+        function startSlideshow() {
+            if (imagesFound.length === 0) {
+                document.getElementById('loader').innerText = "No se encontraron fotos en media/" + area;
+                return;
+            }
 
-            const currentSlide = document.getElementById('slide-' + current);
-            currentSlide.classList.remove('active');
+            document.getElementById('loader').style.display = 'none';
+            var container = document.getElementById('slideshow');
 
-            current = (current % setup.total) + 1;
+            for (var k = 0; k < imagesFound.length; k++) {
+                var img = document.createElement('img');
+                img.src = imagesFound[k];
+                img.className = 'slide' + (k === 0 ? ' active' : '');
+                img.id = 'slide-' + (k + 1);
+                container.appendChild(img);
+            }
 
-            const nextSlide = document.getElementById('slide-' + current);
-            nextSlide.classList.add('active');
+            var current = 1;
+            var total = imagesFound.length;
+
+            setInterval(function() {
+                if (total <= 1) return;
+                document.getElementById('slide-' + current).className = 'slide';
+                current = (current % total) + 1;
+                document.getElementById('slide-' + current).className = 'slide active';
+            }, 8000);
         }
 
-        // Intervalo de cambio (8000ms = 8 segundos)
-        setInterval(rotate, 8000);
+        // Ejecutar escaneo
+        scanImages(1);
 
-        // 5. Reloj en tiempo real
+        // Reloj
         function updateClock() {
-            const now = new Date();
-            const h = String(now.getHours()).padStart(2, '0');
-            const m = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('clock').innerText = `${h}:${m}`;
+            var now = new Date();
+            var h = now.getHours() < 10 ? "0" + now.getHours() : now.getHours();
+            var m = now.getMinutes() < 10 ? "0" + now.getMinutes() : now.getMinutes();
+            document.getElementById('clock').innerText = h + ":" + m;
         }
-        
         setInterval(updateClock, 1000);
         updateClock();
-
-        // 6. Refresco automático de seguridad (cada 1 hora)
-        // Esto sirve para que la tablet busque nuevas fotos en GitHub automáticamente
-        setTimeout(() => {
-            location.reload();
-        }, 3600000);
-
     </script>
 </body>
 </html>
