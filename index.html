@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>YPF Full - Terminal V11</title>
-    <script src="https://cdn.jsdelivr.net/npm/quaggajs@0.12.1/dist/quagga.min.js"></script>
+    <title>YPF Full - Terminal V12</title>
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
     <style>
         :root { --azul: #005596; --amarillo: #ffcc00; --verde: #00a859; --rojo: #cc0000; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
-        
+
         .view { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: none; }
         .active-view { display: block !important; }
 
@@ -24,8 +24,9 @@
 
         /* CAMARA */
         #view-camara { z-index: 100; background: #000; }
+        #cam-video { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
         #interactive { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
-        #interactive video { width: 100%; height: 100%; object-fit: cover; }
+        #interactive video, #interactive canvas { width: 100% !important; height: 100% !important; object-fit: cover; position: absolute; top: 0; left: 0; }
         .mask { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 30%; border: 3px dashed var(--amarillo); z-index: 110; pointer-events: none; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
 
         /* BOTONES */
@@ -34,117 +35,257 @@
         .btn-p { top: 20px; background: var(--amarillo); color: #000; }
         .btn-s { top: 90px; background: var(--verde); color: #fff; }
         .btn-v { width: 100%; height: 80px; background: var(--rojo); color: #fff; border-radius: 0; position: absolute; bottom: 0; font-size: 1.5rem; }
-        
-        #btn-start-cam { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--verde); color: white; padding: 30px; font-size: 2rem; z-index: 160; border-radius: 15px; }
+
+        #btn-start-cam { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--verde); color: white; padding: 30px; font-size: 2rem; z-index: 160; border-radius: 15px; border: none; cursor: pointer; }
 
         #info { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.8); color: #fff; display: flex; justify-content: space-between; padding: 10px 20px; box-sizing: border-box; z-index: 20; border-top: 2px solid var(--azul); }
+
+        #cam-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(200,0,0,0.85); color: #fff; padding: 20px 30px; border-radius: 12px; font-size: 1.2rem; text-align: center; z-index: 170; display: none; max-width: 80%; }
     </style>
 </head>
 <body>
 
     <div id="view-promos" class="view active-view">
-        <button id="f1" class="btn btn-float btn-p" onclick="nav('view-precios')">PRECIOS</button>
-        <button id="f2" class="btn btn-float btn-s" onclick="nav('view-camara')">ESCANEAR</button>
+        <!-- Los botones solo se insertan por JS cuando area === 'full' -->
         <div id="slideshow"></div>
         <div id="info"><span id="txt-area">Cargando...</span><span id="txt-clock">00:00</span></div>
     </div>
 
     <div id="view-precios" class="view">
-        <div class="header"><input type="text" id="input-busqueda" placeholder="Buscar..." onkeyup="filter()"></div>
+        <div class="header">
+            <input type="text" id="input-busqueda" placeholder="Buscar...">
+        </div>
         <div style="height:calc(100% - 160px); overflow:auto;">
             <table style="width:100%; border-collapse:collapse;"><tbody id="res"></tbody></table>
         </div>
-        <button class="btn btn-v" onclick="nav('view-promos')">VOLVER</button>
+        <button class="btn btn-v" id="btn-volver-precios">VOLVER</button>
     </div>
 
     <div id="view-camara" class="view">
         <div class="mask"></div>
         <div id="interactive"></div>
-        <button id="btn-start-cam" onclick="startCameraNow()">TOCAR PARA ACTIVAR CÁMARA</button>
-        <button class="btn btn-v" style="z-index:170;" onclick="cancelCam()">CANCELAR / VOLVER</button>
+        <div id="cam-error"></div>
+        <button id="btn-start-cam">TOCAR PARA ACTIVAR CÁMARA</button>
+        <button class="btn btn-v" style="z-index:170;" id="btn-cancelar-cam">CANCELAR / VOLVER</button>
     </div>
 
     <script>
         const AREA = new URLSearchParams(window.location.search).get('area') || 'full';
+        const IS_FULL = AREA === 'full';
         let DB = [], IMGS = [], CURR = 0;
+        let quaggaListenerRegistered = false;
 
+        // ── Navegación ──────────────────────────────────────────────────────────
         function nav(id) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view'));
             document.getElementById(id).classList.add('active-view');
-            if(id !== 'view-camara') cancelCam();
-            if(id === 'view-precios') {
+            if (id !== 'view-camara') stopCam();
+            if (id === 'view-precios') {
                 render(DB);
                 setTimeout(() => document.getElementById('input-busqueda').focus(), 300);
             }
         }
 
-        function cancelCam() {
-            try { Quagga.stop(); } catch(e) {}
-            document.getElementById('btn-start-cam').style.display = 'block';
-            document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view'));
-            document.getElementById('view-promos').classList.add('active-view');
+        // ── Cámara ───────────────────────────────────────────────────────────────
+        function stopCam() {
+            try { Quagga.stop(); } catch (e) {}
+            const btn = document.getElementById('btn-start-cam');
+            if (btn) btn.style.display = 'block';
+            ocultarErrorCam();
+        }
+
+        function mostrarErrorCam(msg) {
+            const el = document.getElementById('cam-error');
+            el.innerText = msg;
+            el.style.display = 'block';
+        }
+
+        function ocultarErrorCam() {
+            const el = document.getElementById('cam-error');
+            if (el) el.style.display = 'none';
         }
 
         function startCameraNow() {
             document.getElementById('btn-start-cam').style.display = 'none';
+            ocultarErrorCam();
+
+            // Registrar el listener una sola vez
+            if (!quaggaListenerRegistered) {
+                Quagga.onDetected(function(data) {
+                    const codigo = data.codeResult.code;
+                    stopCam();
+                    nav('view-precios');
+                    document.getElementById('input-busqueda').value = codigo;
+                    filter();
+                });
+                quaggaListenerRegistered = true;
+            }
+
             Quagga.init({
-                inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#interactive'), constraints: { facingMode: "user" } },
-                decoder: { readers: ["ean_reader", "ean_8_reader", "code_128_reader"] }
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#interactive'),
+                    constraints: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: "user"
+                    }
+                },
+                locator: { patchSize: "medium", halfSample: true },
+                numOfWorkers: 2,
+                frequency: 10,
+                decoder: {
+                    readers: ["ean_reader", "ean_8_reader", "code_128_reader"]
+                },
+                locate: true
             }, function(err) {
-                if (err) { alert("Error: " + err.name); cancelCam(); return; }
+                if (err) {
+                    console.error("Quagga init error:", err);
+                    let msg = "No se pudo acceder a la cámara.";
+                    if (err.name === "NotAllowedError") msg = "Permiso de cámara denegado. Habilitalo en la configuración del navegador.";
+                    else if (err.name === "NotFoundError") msg = "No se encontró ninguna cámara en el dispositivo.";
+                    else if (err.name === "NotReadableError") msg = "La cámara está en uso por otra aplicación.";
+                    else if (err.name === "OverconstrainedError") msg = "La cámara no soporta la resolución solicitada.";
+                    mostrarErrorCam(msg);
+                    document.getElementById('btn-start-cam').style.display = 'block';
+                    return;
+                }
                 Quagga.start();
-            });
-            Quagga.onDetected(d => {
-                Quagga.stop();
-                nav('view-precios');
-                document.getElementById('input-busqueda').value = d.codeResult.code;
-                filter();
             });
         }
 
+        // ── Precios ──────────────────────────────────────────────────────────────
+        let debounceTimer;
         function filter() {
-            let val = document.getElementById('input-busqueda').value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            let f = DB.filter(i => (i.n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(val)) || (i.b && i.b.includes(val)));
-            render(f);
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const val = document.getElementById('input-busqueda').value
+                    .toLowerCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "");
+                const filtered = DB.filter(i =>
+                    (i.n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(val)) ||
+                    (i.b && i.b.includes(val))
+                );
+                render(filtered);
+            }, 150);
         }
 
         function render(data) {
-            document.getElementById('res').innerHTML = data.map(i => `<tr><td style="padding:15px; border-bottom:1px solid #eee;">${i.n}<br><small>${i.b||''}</small></td><td style="padding:15px; text-align:right; font-weight:bold; color:var(--azul);">${i.p}</td></tr>`).join('') || "<tr><td>No encontrado</td></tr>";
+            document.getElementById('res').innerHTML = data.map(i =>
+                `<tr>
+                    <td style="padding:15px; border-bottom:1px solid #eee;">
+                        ${i.n}<br><small>${i.b || ''}</small>
+                    </td>
+                    <td style="padding:15px; text-align:right; font-weight:bold; color:var(--azul);">
+                        ${i.p}
+                    </td>
+                </tr>`
+            ).join('') || "<tr><td colspan='2' style='padding:15px;'>No encontrado</td></tr>";
         }
 
+        // ── Slideshow ────────────────────────────────────────────────────────────
         function loadImgs() {
-            let isL = window.innerWidth > window.innerHeight;
-            let pre = (AREA==='gaming'?'gc':AREA);
-            let suf = isL ? "_h" : "_v";
-            let count = 0;
-            for(let i=1; i<=15; i++) {
-                let img = new Image();
-                let path = `media/${AREA}/${pre}${i<10?'0'+i:i}${suf}.jpg`;
-                img.onload = () => { IMGS.push(path); if(IMGS.length === 1) startSlides(); };
+            const isL = window.innerWidth > window.innerHeight;
+            const pre = (AREA === 'gaming' ? 'gc' : AREA);
+            const suf = isL ? "_h" : "_v";
+            for (let i = 1; i <= 15; i++) {
+                const img = new Image();
+                const path = `media/${AREA}/${pre}${i < 10 ? '0' + i : i}${suf}.jpg`;
+                img.onload = () => {
+                    IMGS.push(path);
+                    if (IMGS.length === 1) initSlideshow();
+                    else agregarSlide(path, IMGS.length - 1);
+                };
                 img.src = path;
             }
         }
 
-        function startSlides() {
+        function initSlideshow() {
             const container = document.getElementById('slideshow');
-            IMGS.forEach((s, i) => {
-                let el = document.createElement('img'); el.src = s; el.className = 'slide'+(i===0?' active-slide':''); el.id = 's'+i; container.appendChild(el);
-            });
+            container.innerHTML = '';
+            const el = document.createElement('img');
+            el.src = IMGS[0];
+            el.className = 'slide active-slide';
+            el.id = 's0';
+            container.appendChild(el);
+            document.getElementById('txt-area').innerText = `${AREA.toUpperCase()} | A:1`;
+            startSlideInterval();
+        }
+
+        function agregarSlide(path, index) {
+            const container = document.getElementById('slideshow');
+            const el = document.createElement('img');
+            el.src = path;
+            el.className = 'slide';
+            el.id = 's' + index;
+            container.appendChild(el);
             document.getElementById('txt-area').innerText = `${AREA.toUpperCase()} | A:${IMGS.length}`;
-            setInterval(() => {
-                if(IMGS.length < 2) return;
-                document.getElementById('s'+CURR).classList.remove('active-slide');
-                CURR = (CURR+1)%IMGS.length;
-                document.getElementById('s'+CURR).classList.add('active-slide');
+        }
+
+        let slideInterval = null;
+        function startSlideInterval() {
+            if (slideInterval) return;
+            slideInterval = setInterval(() => {
+                if (IMGS.length < 2) return;
+                document.getElementById('s' + CURR).classList.remove('active-slide');
+                CURR = (CURR + 1) % IMGS.length;
+                const next = document.getElementById('s' + CURR);
+                if (next) next.classList.add('active-slide');
             }, 8000);
         }
 
-        window.onload = () => {
-            if(AREA !== 'full') { document.getElementById('f1').style.display='none'; document.getElementById('f2').style.display='none'; }
-            fetch('precios.json?v='+Math.random()).then(r => r.json()).then(d => DB = d).catch(() => console.log("JSON Error"));
-            setInterval(() => { let d = new Date(); document.getElementById('txt-clock').innerText = d.getHours()+":"+(d.getMinutes()<10?"0":"")+d.getMinutes(); }, 1000);
-            loadImgs();
+        // ── Reloj ────────────────────────────────────────────────────────────────
+        function updateClock() {
+            const d = new Date();
+            document.getElementById('txt-clock').innerText =
+                d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
         }
+
+        // ── Init ─────────────────────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // Botones flotantes y funcionalidad de precios/cámara: solo en modo 'full'
+            if (IS_FULL) {
+                const promoView = document.getElementById('view-promos');
+
+                const btnPrecios = document.createElement('button');
+                btnPrecios.className = 'btn btn-float btn-p';
+                btnPrecios.innerText = 'PRECIOS';
+                btnPrecios.addEventListener('click', () => nav('view-precios'));
+                promoView.appendChild(btnPrecios);
+
+                const btnEscanear = document.createElement('button');
+                btnEscanear.className = 'btn btn-float btn-s';
+                btnEscanear.innerText = 'ESCANEAR';
+                btnEscanear.addEventListener('click', () => nav('view-camara'));
+                promoView.appendChild(btnEscanear);
+            }
+
+            // Eventos de vista precios y cámara
+            document.getElementById('btn-volver-precios').addEventListener('click', () => nav('view-promos'));
+            document.getElementById('btn-start-cam').addEventListener('click', startCameraNow);
+            document.getElementById('btn-cancelar-cam').addEventListener('click', () => {
+                stopCam();
+                nav('view-promos');
+            });
+            document.getElementById('input-busqueda').addEventListener('keyup', filter);
+
+            // Cargar precios
+            fetch('precios.json?v=' + Math.random())
+                .then(r => r.json())
+                .then(d => { DB = d; })
+                .catch(() => {
+                    document.getElementById('res').innerHTML =
+                        "<tr><td colspan='2' style='padding:15px; color:var(--rojo);'>Error al cargar el listado de precios.</td></tr>";
+                    console.error("No se pudo cargar precios.json");
+                });
+
+            updateClock();
+            setInterval(updateClock, 1000);
+            loadImgs();
+        });
     </script>
 </body>
 </html>
