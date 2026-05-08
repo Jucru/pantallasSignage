@@ -113,6 +113,19 @@
             if (!quaggaListenerRegistered) {
                 Quagga.onDetected(function(data) {
                     const codigo = data.codeResult.code;
+
+                    // Validar longitud: solo aceptar EAN-13 (13 dígitos) o Code128 (8+ dígitos)
+                    if (!codigo || codigo.length < 8) return;
+
+                    // Validar confianza mínima: descartar lecturas dudosas
+                    const errores = data.codeResult.decodedCodes
+                        .filter(c => c.error !== undefined)
+                        .map(c => c.error);
+                    const confianzaPromedio = errores.length
+                        ? errores.reduce((a, b) => a + b, 0) / errores.length
+                        : 1;
+                    if (confianzaPromedio > 0.2) return; // muy poco confiable, ignorar
+
                     stopCam();
                     nav('view-precios');
                     document.getElementById('input-busqueda').value = codigo;
@@ -136,7 +149,8 @@
                 numOfWorkers: 2,
                 frequency: 10,
                 decoder: {
-                    readers: ["ean_reader", "ean_8_reader", "code_128_reader"]
+                    readers: ["ean_reader", "code_128_reader"]
+                    // ean_8_reader eliminado: causaba lecturas falsas de EAN-13 como EAN-8
                 },
                 locate: true
             }, function(err) {
