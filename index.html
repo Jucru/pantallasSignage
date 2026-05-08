@@ -3,244 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Siera Smart Signage v10.0 - Senior Edition</title>
+    <title>YPF Full - Terminal V11</title>
     <script src="https://cdn.jsdelivr.net/npm/quaggajs@0.12.1/dist/quagga.min.js"></script>
     <style>
         :root { --azul: #005596; --amarillo: #ffcc00; --verde: #00a859; --rojo: #cc0000; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
         
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
-        
-        /* Sistema de Capas (Views) */
-        .view { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: none; overflow: hidden; }
+        .view { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: none; }
         .active-view { display: block !important; }
 
-        /* Promociones */
+        /* PROMOS */
         #view-promos { z-index: 10; background: #000; }
-        #slideshow { width: 100%; height: 100%; }
-        .slide { position: absolute; width: 100%; height: 100%; opacity: 0; transition: opacity 1.5s ease-in-out; object-fit: contain; }
+        .slide { position: absolute; width: 100%; height: 100%; opacity: 0; transition: opacity 1s; object-fit: contain; }
         .active-slide { opacity: 1; }
 
-        /* Lista de Precios */
-        #view-precios { z-index: 100; background: #fff; }
-        .header { height: 90px; background: var(--azul); display: flex; align-items: center; padding: 0 15px; gap: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        #input-busqueda { flex-grow: 1; font-size: 2rem; padding: 12px; border-radius: 10px; border: none; outline: none; }
-        .scroll-area { height: calc(100% - 180px); overflow-y: auto; }
-        table { width: 100%; border-collapse: collapse; }
-        td { padding: 20px; border-bottom: 1px solid #eee; font-size: 1.5rem; color: #333; }
-        .p-price { font-weight: bold; color: var(--azul); font-size: 1.8rem; text-align: right; }
+        /* PRECIOS */
+        #view-precios { z-index: 50; background: #fff; }
+        .header { height: 80px; background: var(--azul); display: flex; align-items: center; padding: 0 15px; }
+        #input-busqueda { flex-grow: 1; font-size: 1.8rem; padding: 12px; border-radius: 8px; border: none; }
 
-        /* Cámara */
-        #view-camara { z-index: 200; background: #000; }
-        #interactive.viewport { width: 100%; height: 100%; position: relative; }
+        /* CAMARA */
+        #view-camara { z-index: 100; background: #000; }
+        #interactive { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
         #interactive video { width: 100%; height: 100%; object-fit: cover; }
-        .mask { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 30%; border: 4px solid var(--amarillo); border-radius: 20px; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; z-index: 210; }
+        .mask { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 30%; border: 3px dashed var(--amarillo); z-index: 110; pointer-events: none; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
 
-        /* Botones Pro */
-        .btn { padding: 20px 35px; font-size: 1.4rem; font-weight: bold; border-radius: 50px; border: none; cursor: pointer; transition: transform 0.1s; }
-        .btn:active { transform: scale(0.95); }
-        .btn-float { position: absolute; right: 30px; z-index: 50; box-shadow: 0 6px 15px rgba(0,0,0,0.4); }
-        .btn-p { top: 30px; background: var(--amarillo); color: #000; }
-        .btn-s { top: 130px; background: var(--verde); color: #fff; }
-        .btn-v { width: 100%; height: 90px; background: var(--rojo); color: #fff; border-radius: 0; font-size: 1.6rem; position: absolute; bottom: 0; }
+        /* BOTONES */
+        .btn { padding: 15px 25px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; border: none; cursor: pointer; z-index: 150; }
+        .btn-float { position: absolute; right: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .btn-p { top: 20px; background: var(--amarillo); color: #000; }
+        .btn-s { top: 90px; background: var(--verde); color: #fff; }
+        .btn-v { width: 100%; height: 80px; background: var(--rojo); color: #fff; border-radius: 0; position: absolute; bottom: 0; font-size: 1.5rem; }
+        
+        #btn-start-cam { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--verde); color: white; padding: 30px; font-size: 2rem; z-index: 160; border-radius: 15px; }
 
-        /* Info Bar */
-        #info { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.85); color: #fff; display: flex; justify-content: space-between; padding: 15px 30px; box-sizing: border-box; z-index: 40; border-top: 3px solid var(--azul); font-size: 1.2rem; }
+        #info { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.8); color: #fff; display: flex; justify-content: space-between; padding: 10px 20px; box-sizing: border-box; z-index: 20; border-top: 2px solid var(--azul); }
     </style>
 </head>
 <body>
 
     <div id="view-promos" class="view active-view">
-        <button id="btn-precios-full" class="btn btn-float btn-p" onclick="navTo('view-precios')">BUSCAR PRECIO</button>
-        <button id="btn-scan-full" class="btn btn-float btn-s" onclick="navTo('view-camara')">ESCANEAR 📷</button>
-        
+        <button id="f1" class="btn btn-float btn-p" onclick="nav('view-precios')">PRECIOS</button>
+        <button id="f2" class="btn btn-float btn-s" onclick="nav('view-camara')">ESCANEAR</button>
         <div id="slideshow"></div>
-        
-        <div id="info">
-            <span id="txt-area">Sincronizando...</span>
-            <span id="txt-clock">00:00</span>
-        </div>
+        <div id="info"><span id="txt-area">Cargando...</span><span id="txt-clock">00:00</span></div>
     </div>
 
     <div id="view-precios" class="view">
-        <div class="header">
-            <input type="text" id="input-busqueda" placeholder="Nombre o código..." onkeyup="filterPrices()">
-            <button class="btn" style="background:var(--verde); color:white; padding:10px 20px;" onclick="navTo('view-camara')">📷</button>
+        <div class="header"><input type="text" id="input-busqueda" placeholder="Buscar..." onkeyup="filter()"></div>
+        <div style="height:calc(100% - 160px); overflow:auto;">
+            <table style="width:100%; border-collapse:collapse;"><tbody id="res"></tbody></table>
         </div>
-        <div class="scroll-area">
-            <table><tbody id="res-precios"></tbody></table>
-        </div>
-        <button class="btn btn-v" onclick="navTo('view-promos')">VOLVER A PUBLICIDAD</button>
+        <button class="btn btn-v" onclick="nav('view-promos')">VOLVER</button>
     </div>
 
     <div id="view-camara" class="view">
         <div class="mask"></div>
         <div id="interactive"></div>
-        <button class="btn btn-v" onclick="navTo('view-promos')">CANCELAR</button>
+        <button id="btn-start-cam" onclick="startCameraNow()">TOCAR PARA ACTIVAR CÁMARA</button>
+        <button class="btn btn-v" style="z-index:170;" onclick="cancelCam()">CANCELAR / VOLVER</button>
     </div>
 
     <script>
-        // --- ESTADO GLOBAL ---
-        const params = new URLSearchParams(window.location.search);
-        const AREA = params.get('area') || 'full';
-        let DATABASE = [];
-        let IMAGES = [];
-        let SLIDE_INDEX = 0;
+        const AREA = new URLSearchParams(window.location.search).get('area') || 'full';
+        let DB = [], IMGS = [], CURR = 0;
 
-        // --- 1. NORMALIZACIÓN DE TEXTO (Para búsqueda sin tildes) ---
-        const normalize = (t) => t ? t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-
-        // --- 2. NAVEGACIÓN Y CONTROL DE BOTONES (Punto 1 y 3 solucionado) ---
-        function navTo(viewId) {
-            // Detener cámara siempre al cambiar de vista
-            try { Quagga.stop(); } catch(e) {}
-
-            // Cambiar visibilidad
+        function nav(id) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view'));
-            document.getElementById(viewId).classList.add('active-view');
-
-            if (viewId === 'view-camara') {
-                initCamera();
-            }
-            if (viewId === 'view-precios') {
-                document.getElementById('input-busqueda').value = "";
-                renderTable(DATABASE);
-                setTimeout(() => document.getElementById('input-busqueda').focus(), 500);
+            document.getElementById(id).classList.add('active-view');
+            if(id !== 'view-camara') cancelCam();
+            if(id === 'view-precios') {
+                render(DB);
+                setTimeout(() => document.getElementById('input-busqueda').focus(), 300);
             }
         }
 
-        // Mostrar botones solo si es el área FULL
-        if (AREA !== 'full') {
-            document.getElementById('btn-precios-full').style.display = 'none';
-            document.getElementById('btn-scan-full').style.display = 'none';
+        function cancelCam() {
+            try { Quagga.stop(); } catch(e) {}
+            document.getElementById('btn-start-cam').style.display = 'block';
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view'));
+            document.getElementById('view-promos').classList.add('active-view');
         }
 
-        // --- 3. CÁMARA (Punto 2 solucionado - Android 13 Friendly) ---
-        function initCamera() {
+        function startCameraNow() {
+            document.getElementById('btn-start-cam').style.display = 'none';
             Quagga.init({
-                inputStream: {
-                    name: "Live",
-                    type: "LiveStream",
-                    target: document.querySelector('#interactive'),
-                    constraints: { facingMode: "user" } // Cámara frontal
-                },
+                inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#interactive'), constraints: { facingMode: "user" } },
                 decoder: { readers: ["ean_reader", "ean_8_reader", "code_128_reader"] }
             }, function(err) {
-                if (err) {
-                    console.error(err);
-                    alert("Por favor, permite el acceso a la cámara en el navegador.");
-                    navTo('view-promos');
-                    return;
-                }
+                if (err) { alert("Error: " + err.name); cancelCam(); return; }
                 Quagga.start();
             });
-
-            Quagga.onDetected((data) => {
-                const code = data.codeResult.code;
-                navTo('view-precios');
-                document.getElementById('input-busqueda').value = code;
-                filterPrices();
+            Quagga.onDetected(d => {
+                Quagga.stop();
+                nav('view-precios');
+                document.getElementById('input-busqueda').value = d.codeResult.code;
+                filter();
             });
         }
 
-        // --- 4. PRECIOS Y BUSQUEDA (Punto 2 corregido) ---
-        function filterPrices() {
-            const term = normalize(document.getElementById('input-busqueda').value);
-            const filtered = DATABASE.filter(item => 
-                normalize(item.n).indexOf(term) > -1 || (item.b && item.b.indexOf(term) > -1)
-            );
-            renderTable(filtered);
+        function filter() {
+            let val = document.getElementById('input-busqueda').value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            let f = DB.filter(i => (i.n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(val)) || (i.b && i.b.includes(val)));
+            render(f);
         }
 
-        function renderTable(data) {
-            const container = document.getElementById('res-precios');
-            container.innerHTML = data.map(item => `
-                <tr>
-                    <td>${item.n}<br><small style="color:gray">${item.b || ''}</small></td>
-                    <td class="p-price">${item.p}</td>
-                </tr>
-            `).join('') || "<tr><td>No se encontraron productos</td></tr>";
+        function render(data) {
+            document.getElementById('res').innerHTML = data.map(i => `<tr><td style="padding:15px; border-bottom:1px solid #eee;">${i.n}<br><small>${i.b||''}</small></td><td style="padding:15px; text-align:right; font-weight:bold; color:var(--azul);">${i.p}</td></tr>`).join('') || "<tr><td>No encontrado</td></tr>";
         }
 
-        // --- 5. SLIDESHOW (Punto 4 solucionado - Método Infalible) ---
-        function scanImages() {
-            const isLandscape = window.innerWidth > window.innerHeight;
-            const suffix = isLandscape ? "_h" : "_v";
-            const prefix = (AREA === 'gaming') ? 'gc' : AREA;
-            let loadedCount = 0;
-
-            for (let i = 1; i <= 25; i++) {
-                const img = new Image();
-                const num = i < 10 ? "0" + i : i;
-                const path = `media/${AREA}/${prefix}${num}${suffix}.jpg`;
-                
-                img.onload = function() {
-                    IMAGES.push(path);
-                    loadedCount++;
-                    checkDone();
-                };
-                img.onerror = function() {
-                    checkDone(true);
-                };
+        function loadImgs() {
+            let isL = window.innerWidth > window.innerHeight;
+            let pre = (AREA==='gaming'?'gc':AREA);
+            let suf = isL ? "_h" : "_v";
+            let count = 0;
+            for(let i=1; i<=15; i++) {
+                let img = new Image();
+                let path = `media/${AREA}/${pre}${i<10?'0'+i:i}${suf}.jpg`;
+                img.onload = () => { IMGS.push(path); if(IMGS.length === 1) startSlides(); };
                 img.src = path;
             }
-
-            let finished = false;
-            function checkDone(isError = false) {
-                if (finished) return;
-                // Si hay error o llegamos al final, arrancamos
-                if (isError || IMAGES.length >= 25) {
-                    finished = true;
-                    startSlideshow();
-                }
-            }
         }
 
-        function startSlideshow() {
+        function startSlides() {
             const container = document.getElementById('slideshow');
-            if (IMAGES.length === 0) {
-                document.getElementById('txt-area').innerText = "Sin fotos en " + AREA;
-                return;
-            }
-
-            IMAGES.forEach((src, i) => {
-                const el = document.createElement('img');
-                el.src = src;
-                el.className = 'slide' + (i === 0 ? ' active-slide' : '');
-                el.id = 's-' + i;
-                container.appendChild(el);
+            IMGS.forEach((s, i) => {
+                let el = document.createElement('img'); el.src = s; el.className = 'slide'+(i===0?' active-slide':''); el.id = 's'+i; container.appendChild(el);
             });
-
-            document.getElementById('txt-area').innerText = `${AREA.toUpperCase()} | A:${IMAGES.length}`;
-
-            if (IMAGES.length > 1) {
-                setInterval(() => {
-                    document.getElementById('s-' + SLIDE_INDEX).classList.remove('active-slide');
-                    SLIDE_INDEX = (SLIDE_INDEX + 1) % IMAGES.length;
-                    document.getElementById('s-' + SLIDE_INDEX).classList.add('active-slide');
-                }, 8000);
-            }
+            document.getElementById('txt-area').innerText = `${AREA.toUpperCase()} | A:${IMGS.length}`;
+            setInterval(() => {
+                if(IMGS.length < 2) return;
+                document.getElementById('s'+CURR).classList.remove('active-slide');
+                CURR = (CURR+1)%IMGS.length;
+                document.getElementById('s'+CURR).classList.add('active-slide');
+            }, 8000);
         }
 
-        // --- INICIALIZACIÓN ---
-        window.onload = function() {
-            // Reloj
-            setInterval(() => {
-                const n = new Date();
-                document.getElementById('txt-clock').innerText = 
-                    (n.getHours() < 10 ? "0" : "") + n.getHours() + ":" + 
-                    (n.getMinutes() < 10 ? "0" : "") + n.getMinutes();
-            }, 1000);
-
-            // Cargar Precios si es Full
-            if (AREA === 'full') {
-                fetch('precios.json?v=' + Math.random())
-                    .then(r => r.json())
-                    .then(d => { DATABASE = d; })
-                    .catch(e => console.error("Error cargando precios.json"));
-            }
-
-            scanImages();
-        };
+        window.onload = () => {
+            if(AREA !== 'full') { document.getElementById('f1').style.display='none'; document.getElementById('f2').style.display='none'; }
+            fetch('precios.json?v='+Math.random()).then(r => r.json()).then(d => DB = d).catch(() => console.log("JSON Error"));
+            setInterval(() => { let d = new Date(); document.getElementById('txt-clock').innerText = d.getHours()+":"+(d.getMinutes()<10?"0":"")+d.getMinutes(); }, 1000);
+            loadImgs();
+        }
     </script>
 </body>
 </html>
