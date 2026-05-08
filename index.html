@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>YPF Full - Terminal V13</title>
+    <title>YPF Full - Terminal V14</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         :root { --azul: #005596; --amarillo: #ffcc00; --verde: #00a859; --rojo: #cc0000; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
@@ -23,12 +24,17 @@
 
         /* CAMARA */
         #view-camara { z-index: 100; background: #000; }
-        #cam-video {
-            width: 100%; height: 100%;
-            object-fit: cover;
-            position: absolute; top: 0; left: 0;
-            transform: scaleX(-1);
-        }
+
+        /* html5-qrcode genera el video dinámicamente dentro de #cam-reader.
+           scaleX(-1) corrige el espejo de la cámara frontal. */
+        #cam-reader { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #cam-reader video { transform: scaleX(-1); }
+
+        /* Ocultar la UI propia de html5-qrcode que no necesitamos */
+        #cam-reader img,
+        #cam-reader button,
+        #cam-reader select { display: none !important; }
+
         .mask {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
@@ -61,14 +67,6 @@
             z-index: 20; border-top: 2px solid var(--azul);
         }
 
-        #cam-status {
-            position: absolute; bottom: 90px; width: 100%;
-            text-align: center; color: #fff;
-            font-size: 1.1rem; z-index: 160;
-            text-shadow: 0 1px 4px #000;
-            pointer-events: none;
-        }
-
         #cam-error {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
@@ -97,21 +95,18 @@
     </div>
 
     <div id="view-camara" class="view">
-        <video id="cam-video" autoplay playsinline muted></video>
+        <div id="cam-reader"></div>
         <div class="mask"></div>
-        <div id="cam-status">Apuntá el código de barras al recuadro</div>
         <div id="cam-error"></div>
         <button id="btn-start-cam">TOCAR PARA ACTIVAR CÁMARA</button>
         <button class="btn btn-v" style="z-index:170;" id="btn-cancelar-cam">CANCELAR / VOLVER</button>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
-
     <script>
         const AREA = new URLSearchParams(window.location.search).get('area') || 'full';
         const IS_FULL = AREA === 'full';
         let DB = [], IMGS = [], CURR = 0;
-        let codeReader = null;
+        let scanner = null;
         let scannerActivo = false;
 
         // ── Navegación ───────────────────────────────────────────────────────────
@@ -125,17 +120,11 @@
             }
         }
 
-        // ── Cámara con ZXing ─────────────────────────────────────────────────────
+        // ── Cámara con html5-qrcode ──────────────────────────────────────────────
         function stopCam() {
-            scannerActivo = false;
-            if (codeReader) {
-                try { codeReader.reset(); } catch (e) {}
-                codeReader = null;
-            }
-            const video = document.getElementById('cam-video');
-            if (video && video.srcObject) {
-                video.srcObject.getTracks().forEach(t => t.stop());
-                video.srcObject = null;
+            if (scanner && scannerActivo) {
+                scanner.stop().catch(() => {});
+                scannerActivo = false;
             }
             const btn = document.getElementById('btn-start-cam');
             if (btn) btn.style.display = 'block';
@@ -156,55 +145,55 @@
         function startCameraNow() {
             document.getElementById('btn-start-cam').style.display = 'none';
             ocultarErrorCam();
-            scannerActivo = true;
 
-            navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'user',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
+            if (!scanner) {
+                scanner = new Html5Qrcode("cam-reader");
+            }
+
+            const config = {
+                fps: 15,
+                qrbox: { width: 280, height: 140 },
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.CODE_128
+                ],
+                videoConstraints: {
+                    facingMode: "user",
+                    width:  { ideal: 1280 },
+                    height: { ideal: 720 },
+                    advanced: [
+                        { focusMode: "continuous" },
+                        { focusDistance: 0.05 }
+                    ]
+                },
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
                 }
-            }).then(stream => {
-                const video = document.getElementById('cam-video');
-                video.srcObject = stream;
+            };
 
-                codeReader = new ZXing.BrowserMultiFormatReader();
-
-                // Solo EAN-13 y Code128, sin EAN-8
-                const hints = new Map();
-                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-                    ZXing.BarcodeFormat.EAN_8,
-                    ZXing.BarcodeFormat.EAN_13,
-                    ZXing.BarcodeFormat.CODE_128
-                ]);
-                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-                codeReader.hints = hints;
-
-                codeReader.decodeFromVideoElement(video, (result, err) => {
+            scanner.start(
+                { facingMode: "user" },
+                config,
+                (codigo, result) => {
                     if (!scannerActivo) return;
-                    if (result) {
-                        const codigo = result.getText();
-                        const fmt = result.getBarcodeFormat();
-                        // Validar longitud exacta según formato para evitar lecturas falsas
-                        const esEAN8  = fmt === ZXing.BarcodeFormat.EAN_8  && codigo.length === 8;
-                        const esEAN13 = fmt === ZXing.BarcodeFormat.EAN_13 && codigo.length === 13;
-                        const es128   = fmt === ZXing.BarcodeFormat.CODE_128 && codigo.length >= 6;
-                        if (!esEAN8 && !esEAN13 && !es128) return;
-                        scannerActivo = false;
-                        stopCam();
-                        nav('view-precios');
-                        document.getElementById('input-busqueda').value = codigo;
-                        filter();
-                    }
-                    // err es normal en ZXing cuando no hay código visible en el cuadro
-                });
-
-            }).catch(err => {
-                console.error("Camera error:", err);
+                    scannerActivo = false;
+                    stopCam();
+                    nav('view-precios');
+                    document.getElementById('input-busqueda').value = codigo;
+                    filter();
+                },
+                () => { /* errores de frame son normales, ignorar */ }
+            ).then(() => {
+                scannerActivo = true;
+            }).catch(e => {
                 let msg = "No se pudo acceder a la cámara.";
-                if (err.name === "NotAllowedError")  msg = "Permiso de cámara denegado. Habilitalo en la configuración de Fully Kiosk.";
-                if (err.name === "NotFoundError")    msg = "No se encontró ninguna cámara en el dispositivo.";
-                if (err.name === "NotReadableError") msg = "La cámara está en uso por otra aplicación.";
+                if (String(e).includes("NotAllowed") || String(e).includes("Permission"))
+                    msg = "Permiso de cámara denegado. Habilitalo en la configuración de Fully Kiosk.";
+                else if (String(e).includes("NotFound"))
+                    msg = "No se encontró ninguna cámara en el dispositivo.";
+                else if (String(e).includes("NotReadable"))
+                    msg = "La cámara está en uso por otra aplicación.";
                 mostrarErrorCam(msg);
                 document.getElementById('btn-start-cam').style.display = 'block';
             });
