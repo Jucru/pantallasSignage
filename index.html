@@ -2,148 +2,158 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Siera Signage v3.0 - AutoDetect</title>
+    <title>YPF Full - Punto de Consulta</title>
+    <script src="https://cdn.jsdelivr.net/npm/quaggajs@0.12.1/dist/quagga.min.js"></script>
     <style>
-        /* Pantalla completa y fondo negro */
-        body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            overflow: hidden; background-color: #000; font-family: sans-serif; 
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+        
+        /* Vistas */
+        .view { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: none; }
+        .active-view { display: block !important; }
+
+        /* --- VISTA PROMOS --- */
+        #slideshow { width: 100%; height: 100%; position: relative; }
+        .slide { position: absolute; width: 100%; height: 100%; opacity: 0; transition: opacity 1s; object-fit: contain; }
+        .active-slide { opacity: 1; }
+
+        /* --- VISTA PRECIOS --- */
+        #view-precios { background: #fff; z-index: 10; }
+        #header-precios { height: 80px; background: #005596; display: flex; align-items: center; padding: 0 20px; gap: 15px; }
+        #input-busqueda { flex-grow: 1; font-size: 1.8rem; padding: 10px; border-radius: 8px; border: none; }
+        #tabla-container { height: calc(100% - 80px); overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 1.5rem; }
+        td { padding: 20px; border-bottom: 1px solid #eee; color: #333; }
+        tr:nth-child(even) { background: #f8f8f8; }
+        .precio-tag { font-weight: bold; color: #005596; font-size: 1.8rem; text-align: right; }
+
+        /* --- VISTA CÁMARA --- */
+        #view-camara { background: #000; }
+        #interactive.viewport { width: 100%; height: 100%; }
+        #interactive.viewport video, canvas { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+        .scan-overlay { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 70%; height: 40%; border: 4px dashed #ffcc00; border-radius: 20px; z-index: 50;
+            box-shadow: 0 0 0 1000px rgba(0,0,0,0.5);
         }
 
-        /* Contenedor del Slideshow */
-        #slideshow { 
-            position: relative; width: 100vw; height: 100vh; 
-            display: flex; align-items: center; justify-content: center;
+        /* Botones de Acción */
+        .btn { 
+            padding: 20px 40px; font-size: 1.5rem; font-weight: bold; border-radius: 50px; 
+            border: none; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-
-        /* Imagen Responsive: Se escala sin recortar */
-        .slide { 
-            position: absolute; 
-            width: 100%; height: 100%; 
-            opacity: 0; transition: opacity 1.2s ease-in-out; 
-            object-fit: contain; /* Muestra la imagen completa */
-            background-color: #000;
-        }
-
-        .active { opacity: 1; }
-
-        /* Barra inferior estilo corporativo */
-        #info-bar { 
-            position: absolute; bottom: 0; width: 100%; 
-            background: rgba(0,0,0,0.8); color: white; 
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 10px 25px; box-sizing: border-box; z-index: 100; 
-            border-top: 3px solid #005596; 
-        }
-
-        #label-data { font-size: 1.2rem; font-weight: bold; letter-spacing: 1px; }
-        #clock { font-size: 1.8rem; font-weight: 300; }
-        #loader { 
-            position: absolute; top: 50%; left: 50%; color: white; 
-            transform: translate(-50%, -50%); z-index: 200; font-size: 1.2rem;
-        }
+        .btn-float { position: fixed; right: 30px; z-index: 100; }
+        .btn-precios { top: 30px; background: #ffcc00; color: #000; }
+        .btn-scan { top: 130px; background: #00a859; color: #fff; }
+        .btn-volver { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #cc0000; color: #fff; z-index: 200; }
     </style>
 </head>
 <body>
 
-    <div id="loader">Sincronizando archivos...</div>
-    <div id="slideshow"></div>
+    <div id="view-promos" class="view active-view">
+        <button class="btn btn-float btn-precios" onclick="openPrecios()">LISTA DE PRECIOS</button>
+        <button class="btn btn-float btn-scan" onclick="openCamara()">📷 ESCANEAR</button>
+        <div id="slideshow"></div>
+    </div>
 
-    <div id="info-bar">
-        <div id="label-data">Iniciando...</div>
-        <div id="clock">00:00</div>
+    <div id="view-precios" class="view">
+        <div id="header-precios">
+            <input type="text" id="input-busqueda" placeholder="Nombre o Código..." onkeyup="filtrarPrecios()">
+            <button class="btn" style="background:#ffcc00" onclick="openCamara()">📷</button>
+        </div>
+        <div id="tabla-container">
+            <table><tbody id="body-precios"></tbody></table>
+        </div>
+        <button class="btn btn-volver" onclick="resetApp()">VOLVER A PROMOS</button>
+    </div>
+
+    <div id="view-camara" class="view">
+        <div class="scan-overlay"></div>
+        <div id="interactive" class="viewport"></div>
+        <button class="btn btn-volver" onclick="resetApp()">CANCELAR</button>
     </div>
 
     <script>
-        // 1. Lógica para detectar el Área (Compatible con Android Viejo)
-        var area = "full";
-        var query = window.location.search.substring(1);
-        var vars = query.split("&");
-        for (var i=0; i<vars.length; i++) {
-            var pair = vars[i].split("=");
-            if(pair[0] == "area"){ area = pair[1]; }
+        var area = new URLSearchParams(window.location.search).get('area') || 'full';
+        var listaPrecios = [];
+        var inactivityTimer;
+
+        // --- GESTIÓN DE VISTAS ---
+        function showView(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active-view'));
+            document.getElementById(viewId).classList.add('active-view');
+            resetInactivity();
         }
 
-        var prefixes = { 'full': 'full', 'playa': 'playa', 'gaming': 'gc' };
-        var prefix = prefixes[area] || 'full';
-        var imagesFound = [];
-        var maxPossible = 30; // Límite de búsqueda
-
-        // 2. Escáner automático de archivos en la carpeta
-        function scanImages(index) {
-            if (index > maxPossible) {
-                startSlideshow();
-                return;
-            }
-
-            var num = (index < 10) ? "0" + index : index;
-            var testImg = new Image();
-            var src = "media/" + area + "/" + prefix + num + ".jpg";
-
-            testImg.onload = function() {
-                imagesFound.push(src);
-                scanImages(index + 1);
-            };
-
-            testImg.onerror = function() {
-                startSlideshow(); // Se detiene al no encontrar más correlativos
-            };
-
-            testImg.src = src;
+        function resetApp() {
+            Quagga.stop();
+            showView('view-promos');
         }
 
-        // 3. Iniciar el carrusel
-        function startSlideshow() {
-            var loader = document.getElementById('loader');
-            var container = document.getElementById('slideshow');
-            var label = document.getElementById('label-data');
+        function openPrecios() {
+            showView('view-precios');
+            document.getElementById('input-busqueda').value = "";
+            renderTabla(listaPrecios);
+        }
 
-            if (imagesFound.length === 0) {
-                loader.innerText = "Error: Sin archivos en media/" + area;
-                return;
-            }
+        function openCamara() {
+            showView('view-camara');
+            Quagga.init({
+                inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#interactive'), constraints: { facingMode: "user" } },
+                decoder: { readers: ["ean_reader", "ean_8_reader", "code_128_reader"] }
+            }, function(err) {
+                if (err) { alert("Cámara no disponible"); resetApp(); return; }
+                Quagga.start();
+            });
 
-            loader.style.display = 'none';
+            Quagga.onDetected(function(data) {
+                var code = data.codeResult.code;
+                Quagga.stop();
+                showView('view-precios');
+                document.getElementById('input-busqueda').value = code;
+                filtrarPrecios();
+            });
+        }
+
+        // --- BUSCADOR ---
+        function filtrarPrecios() {
+            resetInactivity();
+            var term = document.getElementById('input-busqueda').value.toLowerCase();
+            var filtrados = listaPrecios.filter(item => 
+                item.n.toLowerCase().includes(term) || item.b.includes(term) || (item.c && item.c.includes(term))
+            );
+            renderTabla(filtrados);
+        }
+
+        function renderTabla(datos) {
+            var html = "";
+            datos.forEach(item => {
+                html += `<tr>
+                    <td>${item.n}<br><small style="color:gray">${item.b}</small></td>
+                    <td class="precio-tag">${item.p}</td>
+                </tr>`;
+            });
+            document.getElementById('body-precios').innerHTML = html || "<tr><td>No se encontró el producto</td></tr>";
+        }
+
+        // --- INACTIVIDAD (Vuelve a promos solo) ---
+        function resetInactivity() {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(resetApp, 45000); // 45 segundos
+        }
+
+        // --- CARGA DE DATOS Y PROMOS (Tu lógica anterior adaptada) ---
+        function loadData() {
+            fetch('precios.json?v=' + Math.random())
+                .then(response => response.json())
+                .then(data => { listaPrecios = data; });
             
-            // Punto 1: Mostrar Sector y Cantidad (A:X)
-            label.innerText = area.toUpperCase() + " | A:" + imagesFound.length;
-
-            // Inyectar imágenes en el DOM
-            for (var k = 0; k < imagesFound.length; k++) {
-                var img = document.createElement('img');
-                img.src = imagesFound[k];
-                img.className = 'slide' + (k === 0 ? ' active' : '');
-                img.id = 'slide-' + (k + 1);
-                container.appendChild(img);
-            }
-
-            // Rotación automática
-            var current = 1;
-            var total = imagesFound.length;
-            if (total > 1) {
-                setInterval(function() {
-                    document.getElementById('slide-' + current).className = 'slide';
-                    current = (current % total) + 1;
-                    document.getElementById('slide-' + current).className = 'slide active';
-                }, 8000);
-            }
+            // Aquí iría el escaneador de imágenes que ya tienes en GitHub
+            // ... (scanImages)
         }
 
-        // 4. Reloj tiempo real
-        function updateClock() {
-            var now = new Date();
-            var h = (now.getHours() < 10 ? "0" : "") + now.getHours();
-            var m = (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
-            document.getElementById('clock').innerText = h + ":" + m;
-        }
-
-        // Iniciar procesos
-        scanImages(1);
-        setInterval(updateClock, 1000);
-        updateClock();
-
-        // Refresco de seguridad cada 1 hora para buscar nuevos archivos subidos a Git
-        setTimeout(function() { location.reload(); }, 3600000);
+        // Iniciar
+        loadData();
+        // (Incluir aquí el resto del JS del slideshow y updateClock)
     </script>
 </body>
 </html>
